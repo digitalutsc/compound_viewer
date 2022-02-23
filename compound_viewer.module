@@ -1,0 +1,70 @@
+<?php
+
+/**
+ * @file
+ * Contains compound_viewer.module.
+ */
+
+use Drupal\Core\Routing\RouteMatchInterface;
+//
+use Drupal\Component\Utility\UrlHelper;
+use Drupal\Core\Entity\Display\EntityViewDisplayInterface;
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Form\FormState;
+use Drupal\Core\Link;
+use Drupal\Core\Render\Element\RenderElement;
+use Drupal\Core\Template\Attribute;
+use Drupal\Core\Url;
+use Drupal\views\ViewExecutable;
+use Drupal\views\Views;
+use Symfony\Component\HttpFoundation\RedirectResponse;
+use Drupal\node\NodeInterface;
+use Drupal\media\MediaInterface;
+
+function compound_viewer_views_pre_view(ViewExecutable $view, $display_id, array &$args) {
+  //print_r('hello test');
+  \Drupal::logger('my_module')->notice("4testing");
+
+  if (in_array($view->id(), ['islandora_object_metadata', 'members'])) {
+    if ($view->current_display === 'block_metadata_parent_object' || $view->current_display === 'entity_view_1') {
+      $node = \Drupal::routeMatch()->getParameter('node');
+      if ($node instanceof \Drupal\node\NodeInterface && $node->hasField('field_member_of')) {
+        // Get value of parent_reference_field
+        $field = $node->get('field_member_of');
+        if (!$field->isEmpty()) {
+          $nids = $field->getValue();
+          if (!empty($nids) && isset($nids[0]['target_id'])) {
+            $view->args[0] = $nids[0]['target_id'];
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_help().
+ */
+function compound_viewer_help($route_name, RouteMatchInterface $route_match) {
+  switch ($route_name) {
+    // Main module help for the compound_viewer module.
+    case 'help.page.compound_viewer':
+      $output = '';
+      $output .= '<h3>' . t('About') . '</h3>';
+      $output .= '<p>' . t('test') . '</p>';
+      return $output;
+
+    default:
+  }
+}
+
+/**
+ * Implements hook_theme().
+ */
+function compound_viewer_theme() {
+  return [
+    'compound_viewer' => [
+      'render element' => 'children',
+    ],
+  ];
+}

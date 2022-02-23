@@ -1,0 +1,6 @@
+services:
+  compound_viewer.compound_redirect:
+    class: Drupal\compound_viewer\EventSubscriber\CompoundRedirectSubscriber
+    arguments: ['@islandora.utils']
+    tags:
+      - { name: event_subscriber }
