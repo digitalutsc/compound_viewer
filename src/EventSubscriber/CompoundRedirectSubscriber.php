@@ -13,63 +13,63 @@ use Symfony\Component\HttpFoundation\RedirectResponse;
  */
 class CompoundRedirectSubscriber implements EventSubscriberInterface {
 
-  protected $utils;
+    protected $utils;
 
-  /**
-   * Constructs a new RouteSubscriber object.
-   */
-  public function __construct(IslandoraUtils $utils) {
-    $this->utils = $utils;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public static function getSubscribedEvents() {
-    $events['kernel.request'] = ['kernelRequest'];
-
-    return $events;
-  }
-
-  /**
-   * This method is called when the kernel.request is dispatched.
-   * Redirects to the first child when a compound object is viewed.
-   *
-   * @param \Symfony\Component\EventDispatcher\Event $event
-   *   The dispatched event.
-   */
-  public function kernelRequest(Event $event) {
-    $request = $event->getRequest();
-    $route_name = $request->attributes->get('_route');
-
-    if ($route_name != 'entity.node.canonical') {
-      return;
+    /**
+     * Constructs a new RouteSubscriber object.
+     */
+    public function __construct(IslandoraUtils $utils) {
+        $this->utils = $utils;
     }
 
-    $node = \Drupal::routeMatch()->getParameter('node');
-    if (!$node || $node->bundle() != 'islandora_object') {
-      return;
+    /**
+     * {@inheritdoc}
+     */
+    public static function getSubscribedEvents() {
+        $events['kernel.request'] = ['kernelRequest'];
+
+        return $events;
     }
 
-    $terms = $node->get('field_model')->referencedEntities();
-    if (empty($terms)) {
-      return;
-    }
+    /**
+     * This method is called when the kernel.request is dispatched.
+     * Redirects to the first child when a compound object is viewed.
+     *
+     * @param \Symfony\Component\EventDispatcher\Event $event
+     *   The dispatched event.
+     */
+    public function kernelRequest(Event $event) {
+        $request = $event->getRequest();
+        $route_name = $request->attributes->get('_route');
 
-    $term = reset($terms);
-    $uri = $this->utils->getUriForTerm($term);
-    if (empty($uri) || $uri != "http://vocab.getty.edu/aat/300242735") {
-      return;
-    }
-    
-    $members = views_get_view_result('reorder_children', 'page_1', $node->id());
-    if (empty($members)) {
-      return;
-    }
+        if ($route_name != 'entity.node.canonical') {
+            return;
+        }
 
-    $member = reset($members);
-    $response = new RedirectResponse(Url::fromRoute('entity.node.canonical', ['node' => $member->nid])->toString());
-    $event->setResponse($response);
-  }
+        $node = \Drupal::routeMatch()->getParameter('node');
+        if (!$node || $node->bundle() != 'islandora_object') {
+            return;
+        }
+
+        $terms = $node->get('field_model')->referencedEntities();
+        if (empty($terms)) {
+            return;
+        }
+
+        $term = reset($terms);
+        $uri = $this->utils->getUriForTerm($term);
+        if (empty($uri) || $uri != "http://vocab.getty.edu/aat/300242735") {
+            return;
+        }
+        
+        $members = views_get_view_result('reorder_children', 'page_1', $node->id());
+        if (empty($members)) {
+            return;
+        }
+
+        $member = reset($members);
+        $response = new RedirectResponse(Url::fromRoute('entity.node.canonical', ['node' => $member->nid])->toString());
+        $event->setResponse($response);
+    }
 
 }
