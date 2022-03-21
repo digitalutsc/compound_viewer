@@ -1,0 +1,179 @@
+<?php
+
+/**
+ * @file
+ * Contains compound_viewer.module.
+ */
+
+use Drupal\Core\Routing\RouteMatchInterface;
+//
+use Drupal\Component\Utility\UrlHelper;
+use Drupal\Core\Entity\Display\EntityViewDisplayInterface;
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Form\FormState;
+use Drupal\Core\Link;
+use Drupal\Core\Render\Element\RenderElement;
+use Drupal\Core\Template\Attribute;
+use Drupal\Core\Url;
+use Drupal\views\ViewExecutable;
+use Drupal\views\Views;
+use Symfony\Component\HttpFoundation\RedirectResponse;
+use Drupal\node\NodeInterface;
+use Drupal\media\MediaInterface;
+
+
+function compound_viewer_page_attachments(array &$page) {
+  //\Drupal::logger('my_module')->notice("js added");
+  $page['#attached']['library'][] = 'compound_viewer/basic';
+}
+
+function compound_viewer_views_pre_view(ViewExecutable $view, $display_id, array &$args) 
+{
+  //Set description information
+
+    if (in_array($view->id(), ['islandora_object_metadata', 'members'])) {
+        if ($view->current_display === 'block_metadata_parent_object' || $view->current_display === 'entity_view_1') {
+            $node = \Drupal::routeMatch()->getParameter('node');
+            if ($node instanceof \Drupal\node\NodeInterface && $node->hasField('field_member_of')) {
+                // Get value of parent_reference_field
+                $field = $node->get('field_member_of');
+                if (!$field->isEmpty()) {
+                    $nids = $field->getValue();
+                    if (!empty($nids) && isset($nids[0]['target_id'])) {
+                        $view->args[0] = $nids[0]['target_id'];
+                    }
+                }
+            }
+        }
+    }
+}
+
+  /**
+   * Implements hook_help().
+   */
+function compound_viewer_help($route_name, RouteMatchInterface $route_match) 
+{
+    switch ($route_name) {
+      // Main module help for the compound_viewer module.
+    case 'help.page.compound_viewer':
+        $output = '';
+        $output .= '<h3>' . t('About') . '</h3>';
+        $output .= '<p>' . t('test') . '</p>';
+        return $output;
+
+    default:
+    }
+}
+
+  /**
+   * Implements hook_theme().
+   */
+function compound_viewer_theme() 
+{
+    return [
+      'compound_viewer' => [
+        'render element' => 'children',
+      ],
+    ];
+}
+
+  /**
+   * Implements hook_entity_extra_field_info
+   * Defines Permalink field
+   * @return array
+   */
+function compound_viewer_entity_extra_field_info() 
+{
+    $extra_field = [];
+    $extra_field['node']['islandora_object']['display']['permalink_uri'] = [
+      'label' => t('Permalink:'),
+      'description' => t('The Permalink URI to the object'),
+      'weight' => 100,
+      'visible' => true,
+    ];
+    $extra_field['node']['islandora_object']['display']['metadata'] = [
+      'label' => t('Metadata Tabs'),
+      'description' => t('Loads metadata from the metadata/metadata-parent view modes into a field'),
+      'weight' => 100,
+      'visible' => true,
+    ];
+    $extra_field['node']['islandora_object']['display']['object_navigation'] = [
+      'label' => t('Parent, pages and current object navigation'),
+      'description' => t('Display a set of links (3) that gives users the option to navigate to the parent object, children and more'),
+      'weight' => 100,
+      'visible' => true,
+    ];
+    return $extra_field;
+}
+
+  /**
+   * Implements hook_entity_view().
+   */
+  function compound_viewer_entity_view(array &$build, EntityInterface $entity, EntityViewDisplayInterface $display, $view_mode) 
+  {
+    //Required for metadata block to display correctly
+    $ocrExist = false;
+    $route_match_item = \Drupal::routeMatch()->getParameters()->get($entity->getEntityTypeId());
+    $node = \Drupal::routeMatch()->getParameter('node');
+    if ($node instanceof \Drupal\node\NodeInterface) {
+        $nodeId = $node->id();
+        $url_alias = \Drupal::service('path_alias.manager')->getAliasByPath('/node/'. $nodeId);
+    } else {
+        $current_path = \Drupal::service('path.current')->getPath();
+        $nodeId = trim(trim($current_path, '/ocr'), 'node/');
+        $parts = explode("/", $nodeId);
+        if ($parts[0] == 'media') {
+            $mediaId = $parts[1];
+            $media = \Drupal::service('entity_type.manager')->getStorage('media')->load($mediaId);
+            if ($media) {
+                $parentNode = \Drupal::service('islandora.utils')->getParentNode($media);
+            } else {
+                $parentNode = null;
+            }
+        } elseif (isset($parts[1]) && $parts[1] == 'pages') {
+            $nodeId = $parts[0];
+            $parentNode = \Drupal::entityTypeManager()->getStorage('node')->load($nodeId);
+        } else {
+            $parentNode = \Drupal::entityTypeManager()->getStorage('node')->load($nodeId);
+        }
+    }
+
+    // Ensure the entity matches the route.
+    if (($entity === $route_match_item) || ($entity->bundle() === 'extracted_text')) {
+        if ($display->getComponent('metadata')) {
+            $block = \Drupal::service('plugin.manager.block')->createInstance('quicktabs_block:compound_object_metadata');
+            if (is_object($block)) {
+                $build['metadata'] =  $block->build();
+            }
+        }
+
+        $context_manager = \Drupal::service('context.manager');
+      /** @codingStandardsIgnoreStart * */
+      //kpr($context_manager->getActiveContexts());
+      //\Drupal::messenger()->addStatus($view_mode);
+      //  Added to avoid error message.
+      $empty_field_resource_type = '';
+      
+      if ($display->getComponent('permalink_uri')) {
+        $options = ['absolute' => TRUE];
+        $url_object = Drupal\Core\Url::fromRoute('entity.node.canonical', ['node' => $entity->id()], $options);
+        $build['permalink_uri'] = [
+          '#type' => 'container',
+          '#attributes' => [
+            'id' => 'field-permalink-uri',
+          ],
+          'internal_label' => [
+            '#type' => 'item',
+            '#title' => t('Permalink:'),
+            'internal_uri' => [
+              '#type' => 'link',
+              '#title' => t("@url", ['@url' => $url_object->toString()]),
+              '#url' => $url_object
+            ],
+          ],
+        ];
+      }
+    }
+  //  kpr($build);
+}
+
